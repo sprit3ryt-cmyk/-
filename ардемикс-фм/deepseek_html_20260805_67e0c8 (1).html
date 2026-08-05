@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ардемикс FM</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',sans-serif;user-select:none}
+    body{background:#1a0e06;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:12px;position:relative}
+    .mascots-container{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0}
+    .mascot{position:absolute;bottom:20%;pointer-events:auto;cursor:grab;touch-action:none;z-index:9999}
+    .mascot.dragging{cursor:grabbing;z-index:10000}
+    .mascot img{width:100%;height:100%;object-fit:contain;display:block;pointer-events:none}
+    .mascot .flip-btn{position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);background:rgba(255,140,0,0.7);border:1px solid rgba(255,140,0,0.9);border-radius:30px;color:#fff;font-size:11px;padding:2px 10px;cursor:pointer;pointer-events:auto;opacity:0;transition:0.2s;white-space:nowrap;backdrop-filter:blur(4px)}
+    .mascot:hover .flip-btn{opacity:1}
+    .mascot .flip-btn:hover{background:rgba(255,140,0,0.9);transform:translateX(-50%) scale(1.05)}
+    .mascot .resize-handle{position:absolute;bottom:-6px;right:-6px;width:16px;height:16px;background:rgba(255,140,0,0.5);border:2px solid rgba(255,140,0,0.8);border-radius:50%;cursor:nwse-resize;opacity:0;transition:0.2s;z-index:30}
+    .mascot:hover .resize-handle{opacity:1}
+    .mascot .resize-handle:hover{background:rgba(255,140,0,0.8);transform:scale(1.2)}
+    .player-container{width:100%;max-width:860px;background:rgba(40,20,10,0.6);backdrop-filter:blur(18px);border-radius:36px;padding:18px 22px 22px;border:1px solid rgba(255,160,50,0.2);box-shadow:0 20px 48px rgba(0,0,0,0.8);position:relative;z-index:5;overflow:hidden}
+    .player-container::before{content:'';position:absolute;inset:-2px;border-radius:38px;padding:2px;background:conic-gradient(from 0deg,#ff8c00,#ff5500,#ff8c00,#ff5500);-webkit-mask:linear-gradient(#fff 0 0)content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;opacity:0.3}
+    .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding:0 4px;position:relative;z-index:5}
+    .logo-wrapper{position:relative;display:inline-block;cursor:grab;touch-action:none}
+    .logo-wrapper.dragging{cursor:grabbing}
+    .logo-wrapper .logo-resize-handle{position:absolute;bottom:-6px;right:-6px;width:14px;height:14px;background:rgba(255,140,0,0.4);border:2px solid rgba(255,140,0,0.6);border-radius:50%;cursor:nwse-resize;display:none;z-index:20;transition:0.2s}
+    .logo-wrapper:hover .logo-resize-handle,.logo-wrapper.active .logo-resize-handle{display:block}
+    .logo-resize-handle:hover{background:rgba(255,140,0,0.7);transform:scale(1.2)}
+    .logo{display:flex;align-items:center;gap:6px;pointer-events:none}
+    .logo img{height:42px;width:auto;max-width:200px;object-fit:contain;display:none;pointer-events:none}
+    .logo img.visible{display:block}
+    .logo .logo-text{font-size:22px;font-weight:600;letter-spacing:1.5px;background:linear-gradient(135deg,#ff8c00,#ff5500);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:0 0 20px rgba(255,140,0,0.3);pointer-events:none}
+    .logo .logo-text.hidden{display:none}
+    .admin-area{position:relative;z-index:10}
+    .admin-toggle{background:rgba(255,255,255,0.04);border:1px solid rgba(255,140,0,0.2);border-radius:40px;padding:8px 12px;color:#ffb066;font-size:24px;cursor:pointer;backdrop-filter:blur(4px);transition:0.2s;display:flex;align-items:center;justify-content:center;line-height:1;min-width:44px;min-height:44px}
+    .admin-toggle:hover{background:rgba(255,140,0,0.12);border-color:#ff8c00;box-shadow:0 0 20px rgba(255,140,0,0.2);transform:scale(1.05)}
+    .password-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);display:none;justify-content:center;align-items:center;z-index:1000}
+    .password-modal.open{display:flex}
+    .password-box{background:rgba(30,16,8,0.95);backdrop-filter:blur(20px);padding:32px 28px;border-radius:28px;border:1px solid rgba(255,140,0,0.3);box-shadow:0 30px 60px rgba(0,0,0,0.8);max-width:360px;width:90%;text-align:center}
+    .password-box h3{color:#ffcc88;font-size:18px;font-weight:400;margin-bottom:6px}
+    .password-box p{color:#b08040;font-size:13px;margin-bottom:18px}
+    .password-box input{width:100%;padding:12px 16px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,140,0,0.2);border-radius:16px;color:#ffcc88;font-size:16px;outline:none;margin-bottom:14px}
+    .password-box input:focus{border-color:#ff8c00;box-shadow:0 0 20px rgba(255,140,0,0.15)}
+    .password-box .btn-row{display:flex;gap:10px;justify-content:center}
+    .password-box .btn-row button{padding:10px 24px;border-radius:40px;border:1px solid rgba(255,140,0,0.2);background:rgba(255,255,255,0.04);color:#ffb066;font-size:14px;cursor:pointer;transition:0.2s;flex:1}
+    .password-box .btn-row button:hover{background:rgba(255,140,0,0.12);border-color:#ff8c00}
+    .password-box .btn-row button.primary{background:linear-gradient(145deg,rgba(255,140,0,0.2),rgba(200,80,0,0.35));border-color:#ff8c00}
+    .password-box .btn-row button.primary:hover{background:linear-gradient(145deg,rgba(255,140,0,0.3),rgba(220,100,0,0.45))}
+    .password-error{color:#ff6b6b;font-size:12px;margin-top:8px;display:none}
+    .password-error.show{display:block}
+    .admin-panel{position:absolute;top:50px;right:0;width:340px;background:rgba(20,10,5,0.95);backdrop-filter:blur(24px);border-radius:24px;padding:18px 16px;border:1px solid rgba(255,140,0,0.25);box-shadow:0 20px 40px rgba(0,0,0,0.7);display:none;flex-direction:column;gap:12px;max-height:85vh;overflow-y:auto}
+    .admin-panel.open{display:flex}
+    .admin-panel label{font-size:12px;color:#b08040;display:flex;flex-direction:column;gap:4px}
+    .admin-panel .drop-zone{background:rgba(255,255,255,0.03);border:1px dashed #6a4a2a;border-radius:16px;padding:10px 8px;text-align:center;color:#9a7a5a;font-size:12px;cursor:pointer;transition:0.2s}
+    .admin-panel .drop-zone:hover{background:rgba(255,140,0,0.08);border-color:#ff8c00}
+    .admin-panel input[type=file]{display:none}
+    .admin-panel .file-badge{background:rgba(255,140,0,0.1);padding:4px 12px;border-radius:30px;font-size:11px;color:#ffb066;border:1px solid rgba(255,140,0,0.1);display:inline-block;max-width:100%}
+    .admin-panel .size-control{display:flex;align-items:center;gap:10px;padding:4px 0}
+    .admin-panel .size-control input[type=range]{flex:1;-webkit-appearance:none;background:rgba(255,140,0,0.15);height:4px;border-radius:2px;outline:none}
+    .admin-panel .size-control input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#ff8c00;cursor:pointer;box-shadow:0 0 12px rgba(255,140,0,0.3)}
+    .admin-panel .size-control span{color:#ffb066;font-size:13px;min-width:36px;text-align:center}
+    .admin-panel .reset-btn{background:rgba(200,60,60,0.1);border:1px solid rgba(200,80,80,0.2);border-radius:30px;padding:6px 12px;color:#d0a0a0;font-size:13px;cursor:pointer;transition:0.2s;margin-top:4px}
+    .admin-panel .reset-btn:hover{background:rgba(200,60,60,0.2);border-color:rgba(200,80,80,0.4)}
+    .save-indicator{color:#8a7a4a;font-size:11px;text-align:center;padding:2px 0}
+    .playlist-section{margin-top:6px;border-top:1px solid rgba(255,140,0,0.1);padding-top:8px}
+    .playlist-section .playlist-title{color:#b08040;font-size:12px;letter-spacing:.5px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
+    .playlist-section .playlist-title span{color:#6a5a3a;font-size:11px}
+    .playlist-items{max-height:120px;overflow-y:auto;display:flex;flex-direction:column;gap:3px;padding-right:4px}
+    .playlist-items::-webkit-scrollbar{width:4px}
+    .playlist-items::-webkit-scrollbar-track{background:rgba(255,255,255,0.02);border-radius:2px}
+    .playlist-items::-webkit-scrollbar-thumb{background:rgba(255,140,0,0.3);border-radius:2px}
+    .playlist-item{display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,140,0,0.05);transition:.15s;font-size:12px;color:#c0a080;cursor:pointer}
+    .playlist-item:hover{background:rgba(255,140,0,0.06);border-color:rgba(255,140,0,0.15)}
+    .playlist-item.active{background:rgba(255,140,0,0.12);border-color:rgba(255,140,0,0.3);color:#ffcc88}
+    .playlist-item .item-index{color:#6a5a3a;font-size:10px;min-width:20px;text-align:center}
+    .playlist-item .item-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .playlist-item .item-controls{display:flex;gap:2px;opacity:0.4;transition:.15s}
+    .playlist-item:hover .item-controls{opacity:1}
+    .playlist-item .item-controls button{background:0;border:0;color:#b08040;cursor:pointer;font-size:14px;padding:0 3px;transition:.15s;line-height:1}
+    .playlist-item .item-controls button:hover{color:#ff8c00;transform:scale(1.2)}
+    .playlist-item .item-controls button.danger:hover{color:#ff6b6b}
+    .playlist-item .item-controls button:disabled{opacity:0.2;cursor:default;transform:none}
+    .visual-wrapper{position:relative;width:100%;aspect-ratio:16/9;max-height:380px;border-radius:28px;overflow:hidden;background:#0a0604;box-shadow:inset 0 0 40px rgba(80,40,10,0.3),0 4px 24px rgba(0,0,0,0.4);border:1px solid rgba(255,140,0,0.08);margin-bottom:12px}
+    .bg-video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:1;opacity:0.5;display:none}
+    .bg-video.visible{display:block}
+    #audioCanvas{display:block;width:100%;height:100%;background:transparent;position:relative;z-index:2}
+    .center-image{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);border-radius:50%;object-fit:cover;z-index:4;pointer-events:none;border:2px solid rgba(255,140,0,0.2);display:none;background:#0a0604;transition:width .05s ease-out,height .05s ease-out,box-shadow .05s ease-out;will-change:width,height}
+    .center-image.visible{display:block}
+    .center-image.rotating{animation:spinImage 14s linear infinite}
+    .center-image.paused{animation-play-state:paused!important}
+    @keyframes spinImage{0%{transform:translate(-50%,-50%) rotate(0deg)}100%{transform:translate(-50%,-50%) rotate(360deg)}}
+    .controls{display:flex;justify-content:center;align-items:center;gap:14px;padding:2px 0;flex-wrap:wrap}
+    .ctrl-btn{background:rgba(255,255,255,0.04);border:1px solid rgba(255,140,0,0.15);border-radius:40px;padding:10px 18px;min-width:64px;color:#d0a080;font-size:16px;font-weight:500;backdrop-filter:blur(4px);cursor:pointer;transition:.12s;display:flex;align-items:center;justify-content:center;gap:6px;letter-spacing:.3px;box-shadow:0 0 12px rgba(200,100,0,0.05)}
+    .ctrl-btn:hover{background:rgba(255,140,0,0.12);border-color:#ff8c00;box-shadow:0 0 20px rgba(255,140,0,0.2);transform:scale(1.03);color:#ffcc88}
+    .ctrl-btn:active{transform:scale(.94)}
+    .ctrl-btn.play-btn{min-width:110px;background:linear-gradient(145deg,rgba(255,140,0,0.18),rgba(200,80,0,0.3));border-color:#ff8c00;font-size:17px}
+    .ctrl-btn.play-btn:hover{background:linear-gradient(145deg,rgba(255,140,0,0.25),rgba(220,100,0,0.4))}
+    .ctrl-btn:disabled{opacity:0.25;pointer-events:none;filter:grayscale(.5)}
+    .track-info{text-align:center;font-size:13px;color:#b08040;letter-spacing:.2px;min-height:22px;padding:2px 0 4px;text-shadow:0 0 12px rgba(200,100,0,0.1)}
+    .track-info strong{color:#ffb066;font-weight:400}
+    .progress-container{display:flex;align-items:center;gap:12px;padding:4px 0 8px;width:100%}
+    .progress-container .time-label{color:#b08040;font-size:12px;font-variant-numeric:tabular-nums;min-width:40px;letter-spacing:.3px}
+    .progress-container input[type=range]{flex:1;-webkit-appearance:none;background:rgba(255,140,0,0.15);height:4px;border-radius:2px;outline:none;transition:.2s}
+    .progress-container input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#ff8c00;cursor:pointer;box-shadow:0 0 16px rgba(255,140,0,0.4);transition:.15s}
+    .progress-container input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.15);box-shadow:0 0 24px rgba(255,140,0,0.6)}
+    .progress-container input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#ff8c00;cursor:pointer;border:0;box-shadow:0 0 16px rgba(255,140,0,0.4)}
+    @media(max-width:600px){.player-container{padding:12px 14px 16px}.logo img{height:32px;max-width:140px}.logo .logo-text{font-size:18px}.ctrl-btn{padding:8px 12px;min-width:50px;font-size:14px}.ctrl-btn.play-btn{min-width:80px;font-size:15px}.admin-panel{width:280px;right:-8px}.visual-wrapper{max-height:220px}.password-box{padding:24px 20px}.progress-container .time-label{font-size:11px;min-width:32px}.playlist-items{max-height:80px}}
+  </style>
+</head>
+<body>
+
+<!-- ====== ГИФКИ ====== -->
+<div class="mascots-container" id="mascotsContainer">
+  <div class="mascot" id="mascotLeft" style="left:3%; bottom:20%; width:150px; height:150px;">
+    <img id="mascotLeftImg" src="" alt="" style="display:none;">
+    <div class="flip-btn">🔄</div>
+    <div class="resize-handle"></div>
+  </div>
+  <div class="mascot" id="mascotRight" style="right:3%; bottom:20%; width:150px; height:150px;">
+    <img id="mascotRightImg" src="" alt="" style="display:none;">
+    <div class="flip-btn">🔄</div>
+    <div class="resize-handle"></div>
+  </div>
+</div>
+
+<!-- ====== ПЛЕЕР ====== -->
+<div class="player-container">
+  <div class="header">
+    <div class="logo-wrapper" id="logoWrapper">
+      <div class="logo" id="logoContainer">
+        <img id="logoImage" class="" src="" alt="Логотип">
+        <span class="logo-text" id="logoText">✦ Ардемикс FM</span>
+      </div>
+      <div class="logo-resize-handle" id="logoResizeHandle"></div>
+    </div>
+    <div class="admin-area">
+      <button class="admin-toggle" id="adminToggle">⚙️</button>
+      <div class="admin-panel" id="adminPanel">
+        <label>🎵 Музыка (несколько файлов)
+          <div class="drop-zone" id="mediaDrop">Перетащите или нажмите</div>
+          <input type="file" id="mediaFileInput" accept=".mp3,.wav,.mp4,.webm,audio/*,video/*" multiple>
+        </label>
+        <div class="playlist-section">
+          <div class="playlist-title"><span>📋 Плейлист</span><span id="playlistCount">0 треков</span></div>
+          <div class="playlist-items" id="playlistContainer"></div>
+        </div>
+        <label>🎬 Фоновое видео
+          <div class="drop-zone" id="bgVideoDrop">Перетащите или нажмите</div>
+          <input type="file" id="bgVideoInput" accept=".mp4,.webm,video/*">
+        </label>
+        <label>🖼 Изображение в круге
+          <div class="drop-zone" id="imageDrop">Перетащите или нажмите</div>
+          <input type="file" id="imageFileInput" accept=".png,.jpg,.jpeg,.webp,image/*">
+        </label>
+        <label>🏷️ Логотип (PNG с прозрачным фоном)
+          <div class="drop-zone" id="logoDrop">Перетащите или нажмите</div>
+          <input type="file" id="logoFileInput" accept=".png,.webp,image/png,image/webp">
+        </label>
+        <label>🖼️ Картинка слева (GIF/PNG/WebP)
+          <div class="drop-zone" id="mascotLeftDrop">Перетащите или нажмите</div>
+          <input type="file" id="mascotLeftInput" accept=".gif,.png,.webp,image/*">
+        </label>
+        <label>🖼️ Картинка справа (GIF/PNG/WebP)
+          <div class="drop-zone" id="mascotRightDrop">Перетащите или нажмите</div>
+          <input type="file" id="mascotRightInput" accept=".gif,.png,.webp,image/*">
+        </label>
+        <label>📏 Размер картинки в круге
+          <div class="size-control">
+            <input type="range" id="imageSizeSlider" min="15" max="50" value="45">
+            <span id="imageSizeLabel">45%</span>
+          </div>
+        </label>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <span class="file-badge" id="mediaBadge">⏺ нет файлов</span>
+          <span class="file-badge" id="bgVideoBadge">🎬 нет видео</span>
+          <span class="file-badge" id="imageBadge">🖼 нет изображения</span>
+          <span class="file-badge" id="logoBadge">🏷️ нет логотипа</span>
+        </div>
+        <button class="reset-btn" id="resetBtn">✕ Сбросить всё</button>
+        <div class="save-indicator" id="saveIndicator">💾 Всё сохраняется автоматически</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="visual-wrapper">
+    <video id="bgVideo" class="bg-video" muted loop playsinline></video>
+    <canvas id="audioCanvas"></canvas>
+    <img id="centerImage" class="center-image" src="" alt="центр">
+  </div>
+
+  <div class="track-info" id="trackInfo"><strong>✦</strong> загрузите трек через админ-панель</div>
+
+  <div class="progress-container">
+    <span class="time-label" id="currentTime">0:00</span>
+    <input type="range" id="progressSlider" min="0" max="100" value="0" step="0.01">
+    <span class="time-label" id="durationTime">0:00</span>
+  </div>
+
+  <div class="controls">
+    <button class="ctrl-btn" id="prevBtn" disabled>⏮</button>
+    <button class="ctrl-btn play-btn" id="playBtn" disabled>▶ Слушать</button>
+    <button class="ctrl-btn" id="nextBtn" disabled>⏭</button>
+  </div>
+</div>
+
+<!-- ====== МОДАЛКА ПАРОЛЯ ====== -->
+<div class="password-modal" id="passwordModal">
+  <div class="password-box">
+    <h3>🔐 Доступ к настройкам</h3>
+    <p>Введите пароль администратора</p>
+    <input type="password" id="passwordInput" placeholder="Введите пароль">
+    <div class="password-error" id="passwordError">Неверный пароль</div>
+    <div class="btn-row">
+      <button id="passwordCancel">Отмена</button>
+      <button class="primary" id="passwordConfirm">Войти</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ============================================
+  // ВСЕ ЭЛЕМЕНТЫ
+  // ============================================
+  const canvas=document.getElementById('audioCanvas'),ctx=canvas.getContext('2d');
+  const centerImage=document.getElementById('centerImage'),bgVideo=document.getElementById('bgVideo');
+  const playBtn=document.getElementById('playBtn'),prevBtn=document.getElementById('prevBtn'),nextBtn=document.getElementById('nextBtn');
+  const trackInfo=document.getElementById('trackInfo'),progressSlider=document.getElementById('progressSlider');
+  const currentTimeLabel=document.getElementById('currentTime'),durationTimeLabel=document.getElementById('durationTime');
+  const logoImage=document.getElementById('logoImage'),logoText=document.getElementById('logoText');
+  const logoWrapper=document.getElementById('logoWrapper'),logoResizeHandle=document.getElementById('logoResizeHandle');
+  const playlistContainer=document.getElementById('playlistContainer'),playlistCount=document.getElementById('playlistCount');
+  const adminToggle=document.getElementById('adminToggle'),adminPanel=document.getElementById('adminPanel');
+  const passwordModal=document.getElementById('passwordModal'),passwordInput=document.getElementById('passwordInput');
+  const passwordError=document.getElementById('passwordError'),passwordConfirm=document.getElementById('passwordConfirm');
+  const passwordCancel=document.getElementById('passwordCancel');
+  const mediaDrop=document.getElementById('mediaDrop'),mediaInput=document.getElementById('mediaFileInput');
+  const bgVideoDrop=document.getElementById('bgVideoDrop'),bgVideoInput=document.getElementById('bgVideoInput');
+  const imageDrop=document.getElementById('imageDrop'),imageInput=document.getElementById('imageFileInput');
+  const logoDrop=document.getElementById('logoDrop'),logoInput=document.getElementById('logoFileInput');
+  const imageSizeSlider=document.getElementById('imageSizeSlider'),imageSizeLabel=document.getElementById('imageSizeLabel');
+  const mediaBadge=document.getElementById('mediaBadge'),bgVideoBadge=document.getElementById('bgVideoBadge');
+  const imageBadge=document.getElementById('imageBadge'),logoBadge=document.getElementById('logoBadge');
+  const resetBtn=document.getElementById('resetBtn'),saveIndicator=document.getElementById('saveIndicator');
+  const mascotLeftDrop=document.getElementById('mascotLeftDrop'),mascotLeftInput=document.getElementById('mascotLeftInput');
+  const mascotRightDrop=document.getElementById('mascotRightDrop'),mascotRightInput=document.getElementById('mascotRightInput');
+  const mascotLeft=document.getElementById('mascotLeft'),mascotRight=document.getElementById('mascotRight');
+  const mascotLeftImg=document.getElementById('mascotLeftImg'),mascotRightImg=document.getElementById('mascotRightImg');
+
+  // ============================================
+  // СОСТОЯНИЕ
+  // ============================================
+  let audioCtx=null,analyser=null,dataArray=null,source=null,mediaElement=null;
+  let isPlaying=false,isAdmin=false,isDraggingProgress=false;
+  let tracks=[],currentTrackIndex=-1,imageUrl=null,bgVideoUrl=null,logoUrl=null;
+  let animFrameId=null,imageSizePercent=45,progressUpdateInterval=null,basePulse=0.3;
+  let isDraggingLogo=false,isResizingLogo=false;
+  let dragStartX=0,dragStartY=0,logoStartX=0,logoStartY=0;
+  let resizeStartX=0,resizeStartY=0,logoStartWidth=0,logoStartHeight=0;
+  const ADMIN_PASSWORD='67fmardemix';
+  const STORAGE_KEY='ardemix_player_data';
+  const LOGO_STORAGE_KEY='ardemix_logo_state';
+  const MUSIC_FILES = [
+    'ClutterDemix.mp3',
+    'Uwa! So Temperardemix.mp3',
+    'Ардемиксанс.mp3',
+    'Надежда и Ардемиксы.mp3',
+    'Но никто не Ардемиксил.mp3',
+    'Птички Ардемиксички.mp3',
+    'Рингтон-Ардемиксон.mp3',
+    'Ardemixova.mp3'
+  ];
+
+  // ============================================
+  // 1. ЛОГОТИП (УПРАВЛЕНИЕ)
+  // ============================================
+  function saveLogoState(){
+    try{
+      const rect=logoWrapper.getBoundingClientRect();
+      const parentRect=logoWrapper.parentElement.getBoundingClientRect();
+      const state={x:rect.left-parentRect.left,y:rect.top-parentRect.top,width:rect.width,height:rect.height};
+      localStorage.setItem(LOGO_STORAGE_KEY,JSON.stringify(state));
+    }catch(e){}
+  }
+  function loadLogoState(){
+    try{
+      const saved=localStorage.getItem(LOGO_STORAGE_KEY);
+      if(saved){
+        const data=JSON.parse(saved);
+        logoWrapper.style.left=data.x+'px';
+        logoWrapper.style.top=data.y+'px';
+        logoWrapper.style.width=data.width+'px';
+        logoWrapper.style.height=data.height+'px';
+        const img=logoWrapper.querySelector('img');
+        if(img){img.style.width='100%';img.style.height='100%';}
+      }
+    }catch(e){}
+  }
+
+  logoWrapper.addEventListener('mousedown',(e)=>{
+    if(e.target===logoResizeHandle)return;
+    if(!isAdmin)return;
+    isDraggingLogo=true;
+    logoWrapper.classList.add('dragging');
+    const rect=logoWrapper.getBoundingClientRect();
+    dragStartX=e.clientX;dragStartY=e.clientY;
+    logoStartX=rect.left;logoStartY=rect.top;
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove',(e)=>{
+    if(isDraggingLogo){
+      const dx=e.clientX-dragStartX,dy=e.clientY-dragStartY;
+      const parentRect=logoWrapper.parentElement.getBoundingClientRect();
+      const newX=Math.max(0,Math.min(parentRect.width-logoWrapper.offsetWidth,logoStartX-parentRect.left+dx));
+      const newY=Math.max(0,Math.min(parentRect.height-logoWrapper.offsetHeight,logoStartY-parentRect.top+dy));
+      logoWrapper.style.left=newX+'px';logoWrapper.style.top=newY+'px';
+    }
+  });
+
+  document.addEventListener('mouseup',()=>{
+    if(isDraggingLogo){isDraggingLogo=false;logoWrapper.classList.remove('dragging');saveLogoState();}
+    if(isResizingLogo){isResizingLogo=false;saveLogoState();}
+  });
+
+  logoResizeHandle.addEventListener('mousedown',(e)=>{
+    if(!isAdmin)return;
+    isResizingLogo=true;
+    resizeStartX=e.clientX;resizeStartY=e.clientY;
+    logoStartWidth=logoWrapper.offsetWidth;logoStartHeight=logoWrapper.offsetHeight;
+    e.preventDefault();e.stopPropagation();
+  });
+
+  document.addEventListener('mousemove',(e)=>{
+    if(isResizingLogo){
+      const dx=e.clientX-resizeStartX,dy=e.clientY-resizeStartY;
+      const newWidth=Math.max(30,logoStartWidth+dx);
+      const newHeight=Math.max(30,logoStartHeight+dy);
+      logoWrapper.style.width=newWidth+'px';logoWrapper.style.height=newHeight+'px';
+      const img=logoWrapper.querySelector('img');
+      if(img){img.style.width='100%';img.style.height='100%';}
+    }
+  });
+
+  // touch support
+  logoWrapper.addEventListener('touchstart',(e)=>{
+    if(e.target===logoResizeHandle)return;
+    if(!isAdmin)return;
+    const touch=e.touches[0];
+    isDraggingLogo=true;
+    logoWrapper.classList.add('dragging');
+    const rect=logoWrapper.getBoundingClientRect();
+    dragStartX=touch.clientX;dragStartY=touch.clientY;
+    logoStartX=rect.left;logoStartY=rect.top;
+    e.preventDefault();
+  },{passive:false});
+
+  document.addEventListener('touchmove',(e)=>{
+    if(isDraggingLogo){
+      const touch=e.touches[0];
+      const dx=touch.clientX-dragStartX,dy=touch.clientY-dragStartY;
+      const parentRect=logoWrapper.parentElement.getBoundingClientRect();
+      const newX=Math.max(0,Math.min(parentRect.width-logoWrapper.offsetWidth,logoStartX-parentRect.left+dx));
+      const newY=Math.max(0,Math.min(parentRect.height-logoWrapper.offsetHeight,logoStartY-parentRect.top+dy));
+      logoWrapper.style.left=newX+'px';logoWrapper.style.top=newY+'px';
+    }
+  },{passive:false});
+
+  document.addEventListener('touchend',()=>{
+    if(isDraggingLogo){isDraggingLogo=false;logoWrapper.classList.remove('dragging');saveLogoState();}
+    if(isResizingLogo){isResizingLogo=false;saveLogoState();}
+  });
+
+  // ============================================
+  // 2. ГИФКИ
+  // ============================================
+  function initMascots() {
+    try {
+      const saved = localStorage.getItem('ardemix_mascots');
+      if (saved) {
+        const data = JSON.parse(saved);
+        if (data.left && data.left.src) {
+          mascotLeftImg.src = data.left.src;
+          mascotLeftImg.style.display = 'block';
+          mascotLeft.style.left = (data.left.x || 3) + '%';
+          mascotLeft.style.top = (data.left.y || 20) + '%';
+          mascotLeft.style.width = (data.left.w || 150) + 'px';
+          mascotLeft.style.height = (data.left.h || 150) + 'px';
+          mascotLeftImg.style.transform = data.left.flip ? 'scaleX(-1)' : 'scaleX(1)';
+        }
+        if (data.right && data.right.src) {
+          mascotRightImg.src = data.right.src;
+          mascotRightImg.style.display = 'block';
+          mascotRight.style.right = (data.right.x || 3) + '%';
+          mascotRight.style.top = (data.right.y || 20) + '%';
+          mascotRight.style.width = (data.right.w || 150) + 'px';
+          mascotRight.style.height = (data.right.h || 150) + 'px';
+          mascotRightImg.style.transform = data.right.flip ? 'scaleX(-1)' : 'scaleX(1)';
+        }
+      }
+    } catch(e){}
+
+    function saveMascots() {
+      const data = {
+        left: {
+          x: parseFloat(mascotLeft.style.left) || 3,
+          y: parseFloat(mascotLeft.style.top) || 20,
+          w: parseFloat(mascotLeft.style.width) || 150,
+          h: parseFloat(mascotLeft.style.height) || 150,
+          flip: mascotLeftImg.style.transform.includes('scaleX(-1)'),
+          src: mascotLeftImg.src || ''
+        },
+        right: {
+          x: parseFloat(mascotRight.style.right) || 3,
+          y: parseFloat(mascotRight.style.top) || 20,
+          w: parseFloat(mascotRight.style.width) || 150,
+          h: parseFloat(mascotRight.style.height) || 150,
+          flip: mascotRightImg.style.transform.includes('scaleX(-1)'),
+          src: mascotRightImg.src || ''
+        }
+      };
+      localStorage.setItem('ardemix_mascots', JSON.stringify(data));
+    }
+
+    const mascots = [mascotLeft, mascotRight];
+    mascots.forEach((mascot, idx) => {
+      let isDragging = false;
+      let startX, startY, origX, origY;
+
+      mascot.addEventListener('mousedown', (e) => {
+        if (e.target.classList.contains('flip-btn') || e.target.classList.contains('resize-handle')) return;
+        isDragging = true;
+        mascot.classList.add('dragging');
+        const rect = mascot.getBoundingClientRect();
+        const parentRect = mascot.parentElement.getBoundingClientRect();
+        startX = e.clientX; startY = e.clientY;
+        origX = rect.left - parentRect.left;
+        origY = rect.top - parentRect.top;
+        e.preventDefault();
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        const parentRect = mascot.parentElement.getBoundingClientRect();
+        const newX = ((origX + dx) / parentRect.width) * 100;
+        const newY = ((origY + dy) / parentRect.height) * 100;
+        if (idx === 0) mascot.style.left = Math.max(0, Math.min(80, newX)) + '%';
+        else mascot.style.right = Math.max(0, Math.min(80, newX)) + '%';
+        mascot.style.top = Math.max(0, Math.min(80, newY)) + '%';
+      });
+
+      document.addEventListener('mouseup', () => {
+        if (isDragging) { isDragging = false; mascot.classList.remove('dragging'); saveMascots(); }
+      });
+
+      const resizeHandle = mascot.querySelector('.resize-handle');
+      let isResizing = false;
+      let resStartX, resStartY, resStartW, resStartH;
+
+      resizeHandle.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        isResizing = true;
+        resStartX = e.clientX; resStartY = e.clientY;
+        resStartW = mascot.offsetWidth; resStartH = mascot.offsetHeight;
+        e.preventDefault();
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        const dx = e.clientX - resStartX;
+        const dy = e.clientY - resStartY;
+        mascot.style.width = Math.max(40, resStartW + dx) + 'px';
+        mascot.style.height = Math.max(40, resStartH + dy) + 'px';
+      });
+
+      document.addEventListener('mouseup', () => {
+        if (isResizing) { isResizing = false; saveMascots(); }
+      });
+
+      const flipBtn = mascot.querySelector('.flip-btn');
+      const img = mascot.querySelector('img');
+      flipBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const current = img.style.transform;
+        img.style.transform = current.includes('scaleX(-1)') ? 'scaleX(1)' : 'scaleX(-1)';
+        saveMascots();
+      });
+    });
+
+    function setupMascotDrop(dropEl, inputEl, imgEl, side) {
+      dropEl.addEventListener('click', () => {
+        if (!isAdmin) { showPasswordModal(); return; }
+        inputEl.click();
+      });
+      dropEl.addEventListener('dragover', (e) => { e.preventDefault(); if(!isAdmin)return; dropEl.style.background='rgba(255,140,0,0.12)'; });
+      dropEl.addEventListener('dragleave', () => { dropEl.style.background='transparent'; });
+      dropEl.addEventListener('drop', (e) => {
+        e.preventDefault(); dropEl.style.background='transparent';
+        if(!isAdmin){ showPasswordModal(); return; }
+        if(e.dataTransfer.files.length){
+          const file = e.dataTransfer.files[0];
+          if(file.type.startsWith('image/') || file.type === 'image/gif'){
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              imgEl.src = ev.target.result;
+              imgEl.style.display = 'block';
+              const data = JSON.parse(localStorage.getItem('ardemix_mascots') || '{"left":{},"right":{}}');
+              if(side === 'left') data.left.src = ev.target.result;
+              else data.right.src = ev.target.result;
+              localStorage.setItem('ardemix_mascots', JSON.stringify(data));
+              saveMascots();
+            };
+            reader.readAsDataURL(file);
+          } else alert('Поддерживаются GIF, PNG, WebP');
+        }
+      });
+      inputEl.addEventListener('change', () => {
+        if(!isAdmin){ showPasswordModal(); inputEl.value=''; return; }
+        if(inputEl.files.length){
+          const file = inputEl.files[0];
+          if(file.type.startsWith('image/') || file.type === 'image/gif'){
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              imgEl.src = ev.target.result;
+              imgEl.style.display = 'block';
+              const data = JSON.parse(localStorage.getItem('ardemix_mascots') || '{"left":{},"right":{}}');
+              if(side === 'left') data.left.src = ev.target.result;
+              else data.right.src = ev.target.result;
+              localStorage.setItem('ardemix_mascots', JSON.stringify(data));
+              saveMascots();
+            };
+            reader.readAsDataURL(file);
+          } else alert('Поддерживаются GIF, PNG, WebP');
+          inputEl.value = '';
+        }
+      });
+    }
+
+    setupMascotDrop(mascotLeftDrop, mascotLeftInput, mascotLeftImg, 'left');
+    setupMascotDrop(mascotRightDrop, mascotRightInput, mascotRightImg, 'right');
+
+    window.addEventListener('beforeunload', saveMascots);
+  }
+
+  // ============================================
+  // 2.1 ЗАГРУЗКА ГИФОК ИЗ ПАПКИ ASSETS (ДЛЯ ВСЕХ)
+  // ============================================
+  function loadMascotsFromAssets() {
+    fetch('assets/mascot-left.gif')
+      .then(res => {
+        if (!res.ok) throw new Error('Левая гифка не найдена');
+        return res.blob();
+      })
+      .then(blob => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          mascotLeftImg.src = ev.target.result;
+          mascotLeftImg.style.display = 'block';
+          const data = JSON.parse(localStorage.getItem('ardemix_mascots') || '{"left":{},"right":{}}');
+          data.left.src = ev.target.result;
+          localStorage.setItem('ardemix_mascots', JSON.stringify(data));
+          console.log('✅ Левая гифка загружена из assets/');
+        };
+        reader.readAsDataURL(blob);
+      })
+      .catch(() => console.log('⚠️ Левая гифка не найдена в assets/'));
+
+    fetch('assets/mascot-right.gif')
+      .then(res => {
+        if (!res.ok) throw new Error('Правая гифка не найдена');
+        return res.blob();
+      })
+      .then(blob => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          mascotRightImg.src = ev.target.result;
+          mascotRightImg.style.display = 'block';
+          const data = JSON.parse(localStorage.getItem('ardemix_mascots') || '{"left":{},"right":{}}');
+          data.right.src = ev.target.result;
+          localStorage.setItem('ardemix_mascots', JSON.stringify(data));
+          console.log('✅ Правая гифка загружена из assets/');
+        };
+        reader.readAsDataURL(blob);
+      })
+      .catch(() => console.log('⚠️ Правая гифка не найдена в assets/'));
+  }
+
+  // ============================================
+  // 3. ПАРОЛЬ
+  // ============================================
+  function showPasswordModal(){ passwordModal.classList.add('open'); passwordInput.value=''; passwordError.classList.remove('show'); passwordInput.focus(); }
+  function hidePasswordModal(){ passwordModal.classList.remove('open'); }
+
+  function checkPassword(){
+    const pass = passwordInput.value.trim();
+    if(pass === ADMIN_PASSWORD){
+      isAdmin = true;
+      hidePasswordModal();
+      adminPanel.classList.add('open');
+      logoResizeHandle.style.display = 'block';
+      logoWrapper.style.cursor = 'grab';
+      loadLogoState();
+      trackInfo.innerHTML = '<strong>🔓</strong> режим администратора активирован';
+      setTimeout(() => {
+        if(!tracks.length){
+          trackInfo.innerHTML = '<strong>✦</strong> загрузите трек через админ-панель';
+        }
+      }, 2000);
+    } else {
+      passwordError.classList.add('show');
+      passwordInput.value = '';
+      passwordInput.focus();
+    }
+  }
+
+  adminToggle.addEventListener('click', () => {
+    if(isAdmin){ adminPanel.classList.toggle('open'); return; }
+    showPasswordModal();
+  });
+  passwordConfirm.addEventListener('click', checkPassword);
+  passwordCancel.addEventListener('click', hidePasswordModal);
+  passwordInput.addEventListener('keydown', (e) => { if(e.key==='Enter') checkPassword(); if(e.key==='Escape') hidePasswordModal(); });
+  passwordModal.addEventListener('click', (e) => { if(e.target===passwordModal) hidePasswordModal(); });
+
+  // ============================================
+  // 4. ОСНОВНОЙ ПЛЕЕР (МУЗЫКА, ВИЗУАЛИЗАТОР)
+  // ============================================
+  function resizeCanvas(){
+    const rect=canvas.parentElement.getBoundingClientRect();
+    const w=rect.width||400,h=rect.height||225;
+    canvas.width=w*devicePixelRatio;canvas.height=h*devicePixelRatio;
+    canvas.style.width=w+'px';canvas.style.height=h+'px';
+    ctx.scale(devicePixelRatio,devicePixelRatio);
+    updateImageSize(0);
+  }
+  window.addEventListener('resize',resizeCanvas);
+  resizeCanvas();
+
+  function updateImageSize(pulseFactor){
+    const rect=canvas.parentElement.getBoundingClientRect();
+    const baseSize=(imageSizePercent/100)*Math.min(rect.width,rect.height)*0.7;
+    const pulse=0.85+(pulseFactor||0.3)*0.55;
+    const finalSize=baseSize*pulse;
+    centerImage.style.width=finalSize+'px';
+    centerImage.style.height=finalSize+'px';
+    const glowIntensity=0.2+(pulseFactor||0.3)*0.6;
+    const shadowSize=30+(pulseFactor||0.3)*70;
+    centerImage.style.boxShadow=`0 0 ${shadowSize}px rgba(255,140,0,${glowIntensity}),0 0 ${shadowSize*1.5}px rgba(200,80,0,${glowIntensity*0.5})`;
+  }
+
+  imageSizeSlider.addEventListener('input',()=>{
+    imageSizePercent=parseInt(imageSizeSlider.value);
+    imageSizeLabel.textContent=imageSizePercent+'%';
+    if(centerImage.classList.contains('visible'))updateImageSize(basePulse);
+  });
+
+  function initAudioContext(){
+    if(!audioCtx){
+      audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+      analyser=audioCtx.createAnalyser();
+      analyser.fftSize=128;
+      analyser.smoothingTimeConstant=0.7;
+      dataArray=new Uint8Array(analyser.frequencyBinCount);
+    }
+    return audioCtx;
+  }
+
+  function connectMediaToAnalyser(mediaEl){
+    try{
+      if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();
+      const ctx=initAudioContext();
+      if(source){try{source.disconnect();}catch(e){}source=null;}
+      source=ctx.createMediaElementSource(mediaEl);
+      source.connect(analyser);
+      analyser.connect(ctx.destination);
+      return true;
+    }catch(e){console.warn('connect error',e);return false;}
+  }
+
+  function drawVisualization(){
+    if(!analyser||!dataArray){ctx.clearRect(0,0,canvas.width,canvas.height);animFrameId=requestAnimationFrame(drawVisualization);return;}
+    analyser.getByteFrequencyData(dataArray);
+    const w=canvas.width/devicePixelRatio,h=canvas.height/devicePixelRatio;
+    const cx=w/2,cy=h/2,radius=Math.min(w,h)*0.34;
+    let energy=0;const lowEnd=Math.floor(dataArray.length*0.05),highEnd=Math.floor(dataArray.length*0.5);
+    for(let i=lowEnd;i<highEnd&&i<dataArray.length;i++)energy+=dataArray[i];
+    energy=energy/(highEnd-lowEnd)/255;
+    const pulseFactor=Math.min(1,Math.max(0.2,energy*1.6+0.15));
+    basePulse=pulseFactor;
+    if(centerImage.classList.contains('visible'))updateImageSize(pulseFactor);
+    ctx.clearRect(0,0,w,h);
+    const glowSize=radius*0.5+pulseFactor*radius*0.4;
+    const glowGrad=ctx.createRadialGradient(cx,cy,0,cx,cy,glowSize);
+    glowGrad.addColorStop(0,`rgba(255,140,0,${0.03+pulseFactor*0.1})`);
+    glowGrad.addColorStop(1,'rgba(80,40,10,0)');
+    ctx.fillStyle=glowGrad;ctx.beginPath();ctx.arc(cx,cy,glowSize,0,Math.PI*2);ctx.fill();
+    const step=(Math.PI*2)/48;
+    const grad=ctx.createRadialGradient(cx,cy,0,cx,cy,radius*(1+pulseFactor*0.2));
+    grad.addColorStop(0,'#ff8c00');
+    grad.addColorStop(0.5,'#ff6600');
+    grad.addColorStop(1,'#cc4400');
+    ctx.shadowColor='#ff8c00';
+    ctx.shadowBlur=20+pulseFactor*30;
+    const stepData=Math.max(1,Math.floor(dataArray.length/48));
+    for(let i=0;i<dataArray.length&&i<48*stepData;i+=stepData){
+      const idx=Math.min(i,dataArray.length-1),value=dataArray[idx]/255;
+      const barLen=value*radius*(0.85+pulseFactor*0.3)+6,angle=(i/stepData)*step;
+      const startOffset=radius*0.2*(1-pulseFactor*0.3);
+      const x1=cx+Math.cos(angle)*startOffset,y1=cy+Math.sin(angle)*startOffset;
+      const x2=cx+Math.cos(angle)*(startOffset+barLen),y2=cy+Math.sin(angle)*(startOffset+barLen);
+      ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);
+      ctx.strokeStyle=grad;ctx.lineWidth=Math.max(2,value*4+1+pulseFactor*2);
+      ctx.shadowBlur=10+value*25+pulseFactor*20;ctx.stroke();
+    }
+    ctx.shadowBlur=0;
+    const innerRadius=radius*0.35*(1+pulseFactor*0.15);
+    const innerGrad=ctx.createRadialGradient(cx,cy,0,cx,cy,innerRadius);
+    innerGrad.addColorStop(0,`rgba(30,15,5,${0.2+pulseFactor*0.15})`);
+    innerGrad.addColorStop(1,'rgba(80,40,10,0)');
+    ctx.fillStyle=innerGrad;ctx.beginPath();ctx.arc(cx,cy,innerRadius,0,Math.PI*2);ctx.fill();
+    animFrameId=requestAnimationFrame(drawVisualization);
+  }
+
+  function startImageRotation(){if(!imageUrl||centerImage.style.display==='none')return;centerImage.classList.add('rotating');centerImage.classList.remove('paused');}
+  function stopImageRotation(){centerImage.classList.remove('rotating');centerImage.classList.add('paused');}
+
+  function updateProgress(){
+    if(!mediaElement||isDraggingProgress)return;
+    const duration=mediaElement.duration||0,current=mediaElement.currentTime||0;
+    if(duration>0){progressSlider.value=(current/duration)*100;currentTimeLabel.textContent=formatTime(current);durationTimeLabel.textContent=formatTime(duration);}
+  }
+  function formatTime(seconds){if(isNaN(seconds)||!isFinite(seconds))return'0:00';const mins=Math.floor(seconds/60),secs=Math.floor(seconds%60);return mins+':'+(secs<10?'0':'')+secs;}
+  function startProgressUpdate(){if(progressUpdateInterval)clearInterval(progressUpdateInterval);progressUpdateInterval=setInterval(updateProgress,200);}
+  function stopProgressUpdate(){if(progressUpdateInterval){clearInterval(progressUpdateInterval);progressUpdateInterval=null;}}
+  progressSlider.addEventListener('input',()=>{isDraggingProgress=true;if(mediaElement&&mediaElement.duration>0){const percent=parseFloat(progressSlider.value);currentTimeLabel.textContent=formatTime((percent/100)*mediaElement.duration);}});
+  progressSlider.addEventListener('change',()=>{isDraggingProgress=false;if(mediaElement&&mediaElement.duration>0){const percent=parseFloat(progressSlider.value);mediaElement.currentTime=(percent/100)*mediaElement.duration;currentTimeLabel.textContent=formatTime(mediaElement.currentTime);setTimeout(updateProgress,50);}});
+
+  function loadTrack(index){
+    if(!tracks.length||index<0||index>=tracks.length){resetPlayerState();return false;}
+    currentTrackIndex=index;const file=tracks[index],url=URL.createObjectURL(file);
+    if(mediaElement){mediaElement.pause();mediaElement.src='';mediaElement.load();stopProgressUpdate();}
+    const isVideo=file.type.startsWith('video/');
+    const el=document.createElement(isVideo?'video':'audio');
+    el.src=url;el.crossOrigin='anonymous';el.loop=false;el.preload='auto';
+    mediaElement=el;
+    if(!connectMediaToAnalyser(el)){trackInfo.innerText='⚠️ Ошибка подключения';return false;}
+    el.addEventListener('loadedmetadata',()=>{durationTimeLabel.textContent=formatTime(el.duration);progressSlider.value=0;currentTimeLabel.textContent='0:00';});
+    el.addEventListener('timeupdate',()=>{if(!isDraggingProgress)updateProgress();});
+    el.addEventListener('ended',()=>{if(tracks.length>0){const nextIdx=(currentTrackIndex+1)%tracks.length;loadTrack(nextIdx);if(isPlaying){mediaElement.play().catch(()=>{});startProgressUpdate();}}});
+    trackInfo.innerHTML=`<strong>▶</strong> ${file.name.replace(/\.[^.]+$/,'')}`;
+    updateBadges();playBtn.disabled=false;prevBtn.disabled=(tracks.length<=1);nextBtn.disabled=(tracks.length<=1);
+    progressSlider.value=0;currentTimeLabel.textContent='0:00';durationTimeLabel.textContent='0:00';
+    if(isPlaying){el.play().catch(()=>{});startProgressUpdate();}
+    renderPlaylist();return true;
+  }
+
+  function resetPlayerState(){
+    if(mediaElement){mediaElement.pause();mediaElement.src='';mediaElement.load();mediaElement=null;stopProgressUpdate();}
+    currentTrackIndex=-1;isPlaying=false;playBtn.innerText='▶ Слушать';playBtn.disabled=true;prevBtn.disabled=true;nextBtn.disabled=true;
+    trackInfo.innerHTML='<strong>✦</strong> загрузите трек через админ-панель';
+    progressSlider.value=0;currentTimeLabel.textContent='0:00';durationTimeLabel.textContent='0:00';
+    stopImageRotation();if(centerImage.classList.contains('visible'))updateImageSize(0.3);renderPlaylist();
+  }
+
+  function togglePlay(){
+    if(!mediaElement)return;
+    if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();
+    if(isPlaying){
+      mediaElement.pause();isPlaying=false;playBtn.innerText='▶ Слушать';stopImageRotation();if(bgVideoUrl)bgVideo.pause();stopProgressUpdate();
+    }else{
+      mediaElement.play().then(()=>{isPlaying=true;playBtn.innerText='⏸ Пауза';startImageRotation();if(bgVideoUrl)bgVideo.play().catch(()=>{});startProgressUpdate();}).catch(e=>{console.warn('play error',e);isPlaying=false;playBtn.innerText='▶ Слушать';});
+    }
+  }
+
+  function nextTrack(){if(tracks.length===0)return;const nextIdx=(currentTrackIndex+1)%tracks.length;loadTrack(nextIdx);if(isPlaying&&mediaElement){mediaElement.play().catch(()=>{});startProgressUpdate();}}
+  function prevTrack(){if(tracks.length===0)return;const prevIdx=(currentTrackIndex-1+tracks.length)%tracks.length;loadTrack(prevIdx);if(isPlaying&&mediaElement){mediaElement.play().catch(()=>{});startProgressUpdate();}}
+
+  function loadBgVideo(file){if(!file)return;const url=URL.createObjectURL(file);bgVideoUrl=url;bgVideo.src=url;bgVideo.classList.add('visible');bgVideoBadge.innerText=`🎬 ${file.name}`;if(isPlaying)bgVideo.play().catch(()=>{});}
+  function loadCenterImage(file){if(!file)return;const url=URL.createObjectURL(file);imageUrl=url;centerImage.src=url;centerImage.classList.add('visible');centerImage.classList.remove('rotating','paused');imageBadge.innerText=`🖼 ${file.name}`;updateImageSize(basePulse||0.3);if(isPlaying)startImageRotation();else stopImageRotation();}
+  function loadLogo(file){if(!file)return;const url=URL.createObjectURL(file);logoUrl=url;logoImage.src=url;logoImage.classList.add('visible');logoText.classList.add('hidden');logoBadge.innerText=`🏷️ ${file.name}`;logoWrapper.style.width='';logoWrapper.style.height='';logoImage.style.width='';logoImage.style.height='';saveLogoState();}
+  function updateBadges(){if(tracks.length>0){mediaBadge.innerText=`🎵 ${tracks.length} треков`;}else{mediaBadge.innerText='⏺ нет файлов';}}
+  
+  function loadMediaFiles(files) {
+    if (!files || files.length === 0) return;
+    let added = 0;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const type = file.type;
+      if (type.startsWith('audio/') || type.startsWith('video/')) {
+        tracks.push(file);
+        added++;
+      }
+    }
+    if (added === 0) {
+      alert('Поддерживаются MP3, WAV, MP4, WebM');
+      return;
+    }
+    if (tracks.length === added) {
+      loadTrack(0);
+    } else {
+      updateBadges();
+      if (currentTrackIndex === -1) {
+        loadTrack(0);
+      } else {
+        prevBtn.disabled = (tracks.length <= 1);
+        nextBtn.disabled = (tracks.length <= 1);
+        playBtn.disabled = false;
+      }
+    }
+    renderPlaylist();
+  }
+
+  function renderPlaylist(){
+    playlistContainer.innerHTML='';
+    if(tracks.length===0){
+      playlistContainer.innerHTML='<div style="color:#6a5a3a;font-size:11px;text-align:center;padding:8px;">Нет треков</div>';
+      playlistCount.textContent='0 треков';
+      return;
+    }
+    playlistCount.textContent=tracks.length+' треков';
+    tracks.forEach((file,index)=>{
+      const div=document.createElement('div');
+      div.className='playlist-item'+(index===currentTrackIndex?' active':'');
+      const name=file.name.replace(/\.[^.]+$/,'');
+      div.innerHTML=`
+        <span class="item-index">${index+1}</span>
+        <span class="item-name">${name}</span>
+        <span class="item-controls">
+          <button class="move-up" data-index="${index}" ${index===0?'disabled':''}>↑</button>
+          <button class="move-down" data-index="${index}" ${index===tracks.length-1?'disabled':''}>↓</button>
+          <button class="remove-track danger" data-index="${index}">✕</button>
+        </span>
+      `;
+      playlistContainer.appendChild(div);
+    });
+    document.querySelectorAll('.move-up').forEach(b=>b.addEventListener('click',(e)=>{e.stopPropagation();moveTrack(parseInt(b.dataset.index),-1);}));
+    document.querySelectorAll('.move-down').forEach(b=>b.addEventListener('click',(e)=>{e.stopPropagation();moveTrack(parseInt(b.dataset.index),1);}));
+    document.querySelectorAll('.remove-track').forEach(b=>b.addEventListener('click',(e)=>{e.stopPropagation();removeTrack(parseInt(b.dataset.index));}));
+    document.querySelectorAll('.playlist-item').forEach((item,index)=>{item.addEventListener('click',()=>{if(index!==currentTrackIndex&&index<tracks.length){loadTrack(index);if(isPlaying&&mediaElement){mediaElement.play().catch(()=>{});startProgressUpdate();}}});});
+  }
+
+  function moveTrack(index,direction){
+    const newIndex=index+direction;
+    if(newIndex<0||newIndex>=tracks.length)return;
+    const temp=tracks[index];tracks[index]=tracks[newIndex];tracks[newIndex]=temp;
+    if(currentTrackIndex===index)currentTrackIndex=newIndex;
+    else if(currentTrackIndex===newIndex)currentTrackIndex=index;
+    renderPlaylist();updateBadges();
+  }
+
+  function removeTrack(index){
+    if(tracks.length===0)return;
+    const wasPlaying=isPlaying,wasCurrent=(index===currentTrackIndex);
+    if(wasCurrent){if(mediaElement){mediaElement.pause();mediaElement.src='';mediaElement.load();mediaElement=null;stopProgressUpdate();}stopImageRotation();}
+    tracks.splice(index,1);
+    if(tracks.length===0){currentTrackIndex=-1;resetPlayerState();renderPlaylist();updateBadges();return;}
+    if(wasCurrent){currentTrackIndex=Math.min(index,tracks.length-1);loadTrack(currentTrackIndex);if(wasPlaying&&mediaElement){mediaElement.play().catch(()=>{});startProgressUpdate();}}
+    else if(currentTrackIndex>index)currentTrackIndex--;
+    renderPlaylist();updateBadges();
+  }
+
+  function resetAll(){
+    if(mediaElement){mediaElement.pause();mediaElement.src='';mediaElement.load();mediaElement=null;stopProgressUpdate();}
+    tracks=[];currentTrackIndex=-1;isPlaying=false;playBtn.innerText='▶ Слушать';playBtn.disabled=true;prevBtn.disabled=true;nextBtn.disabled=true;
+    trackInfo.innerHTML='<strong>✦</strong> загрузите трек через админ-панель';
+    mediaBadge.innerText='⏺ нет файлов';progressSlider.value=0;currentTimeLabel.textContent='0:00';durationTimeLabel.textContent='0:00';
+    if(imageUrl){URL.revokeObjectURL(imageUrl);imageUrl=null;}centerImage.classList.remove('visible','rotating','paused');centerImage.src='';centerImage.style.boxShadow='';imageBadge.innerText='🖼 нет изображения';
+    if(bgVideoUrl){URL.revokeObjectURL(bgVideoUrl);bgVideoUrl=null;bgVideo.pause();bgVideo.src='';bgVideo.classList.remove('visible');bgVideoBadge.innerText='🎬 нет видео';}
+    if(logoUrl){URL.revokeObjectURL(logoUrl);logoUrl=null;logoImage.classList.remove('visible');logoImage.src='';logoText.classList.remove('hidden');logoBadge.innerText='🏷️ нет логотипа';logoWrapper.style.width='';logoWrapper.style.height='';logoImage.style.width='';logoImage.style.height='';logoWrapper.style.left='0px';logoWrapper.style.top='0px';}
+    if(audioCtx){try{audioCtx.close();}catch(e){}audioCtx=null;analyser=null;dataArray=null;source=null;}
+    renderPlaylist();
+    localStorage.removeItem('ardemix_mascots');
+    localStorage.removeItem(LOGO_STORAGE_KEY);
+    mascotLeftImg.style.display = 'none';
+    mascotRightImg.style.display = 'none';
+  }
+
+  function loadFromAssets() {
+    console.log('🔄 Загрузка из папки assets/music/...');
+    let loaded = 0;
+    
+    MUSIC_FILES.forEach((filename, index) => {
+      fetch(`assets/music/${filename}`)
+        .then(res => {
+          if (!res.ok) throw new Error('Файл не найден');
+          return res.blob();
+        })
+        .then(blob => {
+          const file = new File([blob], filename, { type: blob.type || 'audio/mpeg' });
+          tracks.push(file);
+          loaded++;
+          if (loaded === MUSIC_FILES.length) {
+            console.log('✅ Все треки загружены из assets/');
+            if (tracks.length > 0) {
+              loadTrack(0);
+              renderPlaylist();
+              updateBadges();
+              playBtn.disabled = false;
+            }
+          }
+        })
+        .catch(() => console.log('⚠️ Файл не найден:', filename));
+    });
+
+    fetch('assets/logo.png')
+      .then(res => res.blob())
+      .then(blob => {
+        const file = new File([blob], 'logo.png', { type: 'image/png' });
+        loadLogo(file);
+        console.log('✅ Логотип загружен');
+      })
+      .catch(() => console.log('⚠️ Логотип не найден'));
+
+    fetch('assets/center-image.png')
+      .then(res => res.blob())
+      .then(blob => {
+        const file = new File([blob], 'center-image.png', { type: 'image/png' });
+        loadCenterImage(file);
+        console.log('✅ Изображение для круга загружено');
+      })
+      .catch(() => console.log('⚠️ Изображение для круга не найдено'));
+
+    fetch('assets/bg-video.mp4')
+      .then(res => res.blob())
+      .then(blob => {
+        const file = new File([blob], 'bg-video.mp4', { type: 'video/mp4' });
+        loadBgVideo(file);
+        console.log('✅ Фоновое видео загружено');
+      })
+      .catch(() => console.log('⚠️ Фоновое видео не найдено'));
+  }
+
+  // ============================================
+  // 5. DRAG-AND-DROP ДЛЯ АДМИНКИ
+  // ============================================
+  function setupDropZone(dropEl,inputEl,callback,multiple=false){
+    dropEl.addEventListener('click',()=>{if(!isAdmin){showPasswordModal();return;}inputEl.click();});
+    dropEl.addEventListener('dragover',(e)=>{e.preventDefault();if(!isAdmin)return;dropEl.style.background='rgba(255,140,0,0.12)';});
+    dropEl.addEventListener('dragleave',()=>{dropEl.style.background='transparent';});
+    dropEl.addEventListener('drop',(e)=>{e.preventDefault();dropEl.style.background='transparent';if(!isAdmin){showPasswordModal();return;}if(e.dataTransfer.files.length){if(multiple){callback(e.dataTransfer.files);}else{callback(e.dataTransfer.files[0]);}}});
+    inputEl.addEventListener('change',()=>{if(!isAdmin){showPasswordModal();inputEl.value='';return;}if(inputEl.files.length){if(multiple){callback(inputEl.files);}else{callback(inputEl.files[0]);}inputEl.value='';}});
+  }
+  setupDropZone(mediaDrop,mediaInput,loadMediaFiles,true);
+  setupDropZone(bgVideoDrop,bgVideoInput,(file)=>{if(file.type.startsWith('video/')){loadBgVideo(file);}else{alert('Поддерживаются MP4, WebM');}},false);
+  setupDropZone(imageDrop,imageInput,(file)=>{if(file.type.startsWith('image/')){loadCenterImage(file);}else{alert('Поддерживаются PNG, JPG, WebP');}},false);
+  setupDropZone(logoDrop,logoInput,(file)=>{if(file.type==='image/png'||file.type==='image/webp'||file.name.match(/\.(png|webp)$/i)){loadLogo(file);}else{alert('Поддерживаются PNG и WebP с прозрачным фоном');}},false);
+  resetBtn.addEventListener('click',()=>{if(!isAdmin){showPasswordModal();return;}resetAll();});
+
+  // ============================================
+  // 6. КНОПКИ
+  // ============================================
+  playBtn.addEventListener('click',togglePlay);
+  nextBtn.addEventListener('click',nextTrack);
+  prevBtn.addEventListener('click',prevTrack);
+  document.addEventListener('keydown',(e)=>{if(e.target.tagName==='INPUT')return;if(e.key===' '||e.key==='Space'){e.preventDefault();if(!playBtn.disabled)togglePlay();}});
+
+  // ============================================
+  // 7. ЗАПУСК
+  // ============================================
+  imageSizeSlider.value = 45;
+  imageSizeLabel.textContent = '45%';
+  imageSizePercent = 45;
+  
+  drawVisualization();
+  loadLogoState();
+  initMascots();
+  loadFromAssets();
+  loadMascotsFromAssets();
+  
+  logoResizeHandle.style.display='none';
+  logoWrapper.style.cursor='default';
+  console.log('🎵 Ардемикс FM · пароль: 67fmardemix');
+  console.log('🖼️ Гифки загружаются из папки assets/ для всех');
+})();
+</script>
+</body>
+</html>
